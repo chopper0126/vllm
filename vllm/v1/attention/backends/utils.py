@@ -27,6 +27,7 @@ from vllm.utils import cdiv
 
 if TYPE_CHECKING:
     from vllm.attention.backends.abstract import AttentionImpl
+    from vllm.forward_context import AFDMetadata
     from vllm.v1.core.sched.output import SchedulerOutput
     from vllm.v1.worker.gpu_input_batch import InputBatch
 
@@ -289,6 +290,7 @@ class AttentionMetadataBuilder(abc.ABC, Generic[M]):
         common_prefix_len: int,
         common_attn_metadata: CommonAttentionMetadata,
         fast_build: bool = False,
+        **kwargs,
     ) -> M:
         """
         Central method that builds attention metadata.
@@ -304,7 +306,9 @@ class AttentionMetadataBuilder(abc.ABC, Generic[M]):
         raise NotImplementedError
 
     def build_for_cudagraph_capture(
-        self, common_attn_metadata: CommonAttentionMetadata
+        self,
+        common_attn_metadata: CommonAttentionMetadata,
+        afd_metadata: Optional["AFDMetadata"] = None
     ) -> M:
         """
         Build attention metadata for CUDA graph capture. Uses build by default.
@@ -312,7 +316,7 @@ class AttentionMetadataBuilder(abc.ABC, Generic[M]):
         super().build_for_cudagraph_capture.
         """
         return self.build(
-            common_prefix_len=0, common_attn_metadata=common_attn_metadata
+            common_prefix_len=0, common_attn_metadata=common_attn_metadata,afd_metadata=afd_metadata
         )
 
     def build_for_drafting(
@@ -909,12 +913,14 @@ def create_fast_prefill_custom_backend(
             common_prefix_len: int,
             common_attn_metadata: CommonAttentionMetadata,
             fast_build: bool = False,
+            **kwargs,
         ) -> AttentionMetadata:
             new_common_attn_metadata = (
                 make_kv_sharing_fast_prefill_common_attn_metadata(common_attn_metadata)
             )
             metadata = super().build(
-                common_prefix_len, new_common_attn_metadata, fast_build
+                common_prefix_len, new_common_attn_metadata, fast_build,
+                **kwargs
             )
 
             class KVSharingFastPrefillAttentionMetadata(

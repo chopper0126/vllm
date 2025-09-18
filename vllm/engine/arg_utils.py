@@ -32,6 +32,7 @@ from typing_extensions import TypeIs, deprecated
 
 import vllm.envs as envs
 from vllm.config import (
+    AFDConfig, 
     CacheConfig,
     CompilationConfig,
     ConfigType,
@@ -523,6 +524,12 @@ class EngineArgs:
     async_scheduling: bool = SchedulerConfig.async_scheduling
 
     kv_sharing_fast_prefill: bool = CacheConfig.kv_sharing_fast_prefill
+
+    # AFD config
+    afd_config: Optional[AFDConfig] = None
+
+    # AFD config
+    afd_config: Optional[AFDConfig] = None
 
     def __post_init__(self):
         # support `EngineArgs(compilation_config={...})`
@@ -1026,6 +1033,7 @@ class EngineArgs:
         vllm_group.add_argument(
             "--compilation-config", "-O", **vllm_kwargs["compilation_config"]
         )
+        vllm_group.add_argument("--afd-config", **vllm_kwargs["afd_config"])
         vllm_group.add_argument(
             "--additional-config", **vllm_kwargs["additional_config"]
         )
@@ -1575,6 +1583,7 @@ class EngineArgs:
             kv_transfer_config=self.kv_transfer_config,
             kv_events_config=self.kv_events_config,
             additional_config=self.additional_config,
+            afd_config=self.afd_config,
         )
 
         return config
