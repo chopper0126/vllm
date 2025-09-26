@@ -952,6 +952,8 @@ _AE_GROUP: Optional[GroupCoordinator] = None
 
 _NEW_DEFAULT_GROUP: Optional[dist.ProcessGroup] = None
 
+_NEW_CPU_DEFAULT_GROUP: Optional[dist.ProcessGroup] = None
+
 
 def get_ep_group() -> GroupCoordinator:
     assert _EP is not None, ("expert parallel group is not initialized")
@@ -964,6 +966,10 @@ def get_ae_group_new() -> GroupCoordinator:
 def get_new_default_group() -> dist.ProcessGroup:
     assert _NEW_DEFAULT_GROUP is not None, ("_NEW_DEFAULT_GROUP  is not initialized")
     return _NEW_DEFAULT_GROUP
+
+def get_new_cpu_default_group() -> dist.ProcessGroup:
+    assert _NEW_CPU_DEFAULT_GROUP is not None, ("_NEW_CPU_DEFAULT_GROUP  is not initialized")
+    return _NEW_CPU_DEFAULT_GROUP
 
 def get_pp_group() -> GroupCoordinator:
     assert _PP is not None, (
@@ -1057,23 +1063,41 @@ def init_distributed_environment(world_size: int = -1,
             timeout=timeout)
             # add new_default_group
             global _NEW_DEFAULT_GROUP
+            global _NEW_CPU_DEFAULT_GROUP
             attn_ranks = list(config.additional_config.get("attn_ranks"))
             ffn_ranks = list(config.additional_config.get("ffn_ranks"))
             if _NEW_DEFAULT_GROUP is None:
-                _NEW_DEFAULT_GROUP = creat_hccl_process_group(rank, len(attn_ranks) + len(ffn_ranks))
-            # switcher, update default group to new_default_group
-            default_pg_switcher = DefaultProcessGroupSwitcher(_get_default_group(), _NEW_DEFAULT_GROUP)
-            # create sub_group in new_default_group
-            with default_pg_switcher:
-                sub_group_ranks = []
-                for i in range(len(ffn_ranks)):
-                    ranks = list([attn_ranks[i],ffn_ranks[i]])
-                    sub_group_ranks.append(ranks)
-                global _AE_GROUP
-                _AE_GROUP = init_model_parallel_group(sub_group_ranks,
-                                        rank,
-                                        backend,
-                                        group_name="ae")
+                _NEW_DEFAULT_GROUP ,_NEW_CPU_DEFAULT_GROUP= creat_hccl_process_group(rank, len(attn_ranks) + len(ffn_ranks))
+           
+            pre_default_group = _get_default_group()
+            set_process_group(_NEW_DEFAULT_GROUP)
+            sub_group_ranks = []
+            for i in range(len(ffn_ranks)):
+                ranks = list([attn_ranks[i],ffn_ranks[i]])
+                sub_group_ranks.append(ranks)
+            global _AE_GROUP
+            _AE_GROUP = init_model_parallel_group(sub_group_ranks,
+                                    rank,
+                                    backend,
+                                    group_name="ae")
+            
+            # send/recv in sub_group       [[0, 2], [1, 3]]
+            data = torch.tensor([100+rank]).npu()
+            print(f'Sub Group send Before: rank={rank}, data={data}') # [0, 1, 2, 3]
+            _AE_GROUP.send(data)
+            print(f'Sub Group send After: rank={rank}, data={data}')  # 
+            reset_process_group(pre_default_group)
+            # --------- test cpu ---#
+            # send/recv in sub_group       [[0, 2], [1, 3]]
+            data = torch.tensor([100+rank])
+            print(f'Sub cpu Group send Before: rank={rank}, data={data}') # [0, 1, 2, 3]
+            dist.send(tensor=data, dst=rank + 2,group=_NEW_CPU_DEFAULT_GROUP)
+            # _AE_GROUP.send(data)
+            print(f'Sub cpu Group send After: rank={rank}, data={data}')  # 
+
+
+
+            print(f"rank={rank},end to test global hccl") 
             print(f'rank={rank},create global process group success')      
             print(f'rank={rank},start to run model') 
         else:
@@ -1081,8 +1105,7 @@ def init_distributed_environment(world_size: int = -1,
                 backend=backend,
                 init_method=distributed_init_method,
                 world_size=world_size,
-                rank=rank,
-                timeout=timeout)
+                rank=rank)
         
         
     # set the local rank
@@ -1117,6 +1140,12 @@ class DefaultProcessGroupSwitcher:
     def __exit__(self, exc_type, exc_value, traceback):
         _update_default_pg(self.default_group)  
 
+def set_process_group(new_default_group):
+    _update_default_pg(new_default_group)  # 切换进程组
+
+def reset_process_group(default_group):
+    _update_default_pg(default_group)  # 恢复原进程组
+
 def creat_hccl_process_group(rank, world_size):
     import torch
     import torch_npu
@@ -1124,12 +1153,20 @@ def creat_hccl_process_group(rank, world_size):
     torch.npu.set_device(rank)
     new_default_group = init_process_group(
         init_method='tcp://127.0.0.1:29500',
-        backend='gloo', 
+        backend='hccl', 
         rank=rank, 
         world_size=world_size, 
         group_name="new_hccl"
     )
-    return new_default_group
+    # TODO :use self.process_group.send_obj replace
+    cpu_new_default_group = init_process_group(
+        init_method='tcp://127.0.0.1:29500',
+        backend='gloo', 
+        rank=rank, 
+        world_size=world_size, 
+        group_name="new_gloo"
+    )
+    return new_default_group,cpu_new_default_group
 
 def init_process_group(
     backend: Union[str, Backend] = None,
@@ -1423,11 +1460,6 @@ def destroy_model_parallel():
     if _PP:
         _PP.destroy()
     _PP = None
-
-    global _DCP
-    if _DCP:
-        _DCP.destroy()
-    _DCP = None
 
     global _DP
     if _DP:

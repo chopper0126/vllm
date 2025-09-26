@@ -65,7 +65,8 @@ from .interfaces import MixtureOfExperts, SupportsLoRA, SupportsPP
 from .utils import (PPMissingLayer, is_pp_missing_parameter,
                     make_empty_intermediate_tensors_factory, make_layers,
                     maybe_prefix)
-
+from vllm.distributed.parallel_state import get_ep_group,get_world_group,get_new_default_group
+from vllm.forward_context import get_forward_context
 
 class DeepseekV2MLP(nn.Module):
 
@@ -626,6 +627,9 @@ class DeepseekV2DecoderLayer(nn.Module):
         quant_config = vllm_config.quant_config
         parallel_config = vllm_config.parallel_config
 
+        self.enable_afd = vllm_config.additional_config.get(
+            "enable_afd", False)
+
         self.hidden_size = config.hidden_size
         rope_theta = getattr(config, "rope_theta", 10000)
         rope_scaling = getattr(config, "rope_scaling", None)
@@ -693,37 +697,110 @@ class DeepseekV2DecoderLayer(nn.Module):
         else:
             hidden_states, residual = self.input_layernorm(
                 hidden_states, residual)
-        hidden_states = self.self_attn(
-            positions=positions,
-            hidden_states=hidden_states,
-        )
+        if self.enable_afd:
+            hidden_states = self.self_attn(
+                positions=positions,
+                hidden_states=hidden_states,
+            )
 
-        if hidden_states.dtype == torch.float16:
-            # Fix FP16 overflow
-            # We scale both hidden_states and residual before
-            # rmsnorm, and rmsnorm result would not affect by scale.
-            hidden_states *= 1. / self.routed_scaling_factor
-            if self.layer_idx == 0:
-                # The residual is shared by all layers, we only scale it on
-                # first layer.
-                residual *= 1. / self.routed_scaling_factor
+            if hidden_states.dtype == torch.float16:
+                # Fix FP16 overflow
+                # We scale both hidden_states and residual before
+                # rmsnorm, and rmsnorm result would not affect by scale.
+                hidden_states *= 1. / self.routed_scaling_factor
+                if self.layer_idx == 0:
+                    # The residual is shared by all layers, we only scale it on
+                    # first layer.
+                    residual *= 1. / self.routed_scaling_factor
 
-        # Fully Connected
-        hidden_states, residual = self.post_attention_layernorm(
-            hidden_states, residual)
-        hidden_states = self.mlp(hidden_states)
+            # Fully Connected
+            hidden_states, residual = self.post_attention_layernorm(
+                hidden_states, residual)
+            # 
+            new_default_group = get_new_default_group()
+            rank = get_world_group().rank_in_group
+            dst = rank + 2
 
-        if isinstance(self.mlp,
-                      DeepseekV2MLP) and hidden_states.dtype == torch.float16:
-            # Fix FP16 overflow
-            # Scaling the DeepseekV2MLP output, it is the input of
-            # input_layernorm of next decoder layer.
-            # The scaling of DeepseekV2MOE output would be done in the forward
-            # of DeepseekV2MOE
-            hidden_states *= 1. / self.routed_scaling_factor
+            #----------send ffn_need_metadata ------------#
+            forward_context = get_forward_context()
+            moe_comm_method_name = forward_context.moe_comm_method_name
+            # print(f'moe_comm_method_name is {moe_comm_method_name}')
+
+            size_tensor = torch.tensor(hidden_states.size()).npu()
+            torch.distributed.send(size_tensor,dst=dst,group=new_default_group)
+            torch.distributed.send(hidden_states,dst=dst,group=new_default_group)
+
+            # print(f"self.layer_idx is {self.layer_idx},after attn send hidden_states shape is == {hidden_states.shape}")
+            # recv export发送的数据
+            # print('attn start to recv')
+            torch.distributed.recv(hidden_states,src=dst,group=new_default_group)
+            # print(f"self.layer_idx is {self.layer_idx},接收export发送的数据 hidden_states shape is == {hidden_states.shape}")
+        else:
+            hidden_states = self.self_attn(
+                positions=positions,
+                hidden_states=hidden_states,
+            )
+
+            if hidden_states.dtype == torch.float16:
+                # Fix FP16 overflow
+                # We scale both hidden_states and residual before
+                # rmsnorm, and rmsnorm result would not affect by scale.
+                hidden_states *= 1. / self.routed_scaling_factor
+                if self.layer_idx == 0:
+                    # The residual is shared by all layers, we only scale it on
+                    # first layer.
+                    residual *= 1. / self.routed_scaling_factor
+
+            # Fully Connected
+            hidden_states, residual = self.post_attention_layernorm(
+                hidden_states, residual)
+            hidden_states = self.mlp(hidden_states)
+
+            if isinstance(self.mlp,
+                        DeepseekV2MLP) and hidden_states.dtype == torch.float16:
+                # Fix FP16 overflow
+                # Scaling the DeepseekV2MLP output, it is the input of
+                # input_layernorm of next decoder layer.
+                # The scaling of DeepseekV2MOE output would be done in the forward
+                # of DeepseekV2MOE
+                hidden_states *= 1. / self.routed_scaling_factor
 
         return hidden_states, residual
 
+    
+    # ----------------------------------------- afd-related --------------------------------------------
+    def ffn_forward(
+        self,
+    ) -> torch.Tensor:
+        new_default_group = get_new_default_group()
+        # recv:接收attn发送的数据
+        rank = get_world_group().rank_in_group
+        src = rank
+
+        #------------recv------------------#
+        size_tensor = torch.zeros(2, dtype=torch.int64).npu()
+        # print(f'before recv size_tensor is {size_tensor}')
+        torch.distributed.recv(size_tensor,src=src,group=new_default_group)
+        # The hidden_states is a two-dimensional matrix.
+        hidden_states = torch.zeros([size_tensor[0],size_tensor[1]],dtype=torch.bfloat16).npu()
+
+        # hidden_states = torch.empty(size=size_tensor.size()).npu()
+        torch.distributed.recv(hidden_states,src=src,group=new_default_group)
+
+        hidden_states = self.mlp(hidden_states)
+        if isinstance(
+                self.mlp,
+                DeepseekV2MLP) and hidden_states.dtype == torch.float16:
+                # Fix FP16 overflow
+                # Scaling the DeepseekV2MLP output, it is the input of
+                # input_layernorm of next decoder layer.
+                # The scaling of DeepseekV2MOE output would be done in the forward
+                # of DeepseekV2MOE
+                hidden_states *= 1. / self.routed_scaling_factor
+            
+        # print(f"self.layer_idx is {self.layer_idx},mlp 计算完成 hidden_states shape is == {hidden_states.shape}")
+        torch.distributed.send(hidden_states,dst=src,group=new_default_group)
+        # print(f"self.layer_idx is {self.layer_idx},mlp 发送完成 hidden_states shape is == {hidden_states.shape}")
 
 @support_torch_compile
 class DeepseekV2Model(nn.Module):
