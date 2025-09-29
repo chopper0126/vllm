@@ -101,6 +101,9 @@ elif current_platform.is_xpu():
 
 logger = init_logger(__name__)
 from vllm.logger import init_logger
+from vllm.distributed.afd_transfer.afd_connector.metadata import (
+    AFDConnectorMetadata)
+from vllm_ascend.distributed.afd_communicators import send_object,recv_object,FFNNeedForwardData
 
 logger = init_logger(__name__)
 
@@ -1136,6 +1139,11 @@ class DeepseekV2DecoderLayer(nn.Module):
         afd_connector = afd_metadata.afd_connector
         logger.info(f"attn decode layer :{self.layer_idx}")
         logger.info(f"hidden states type: {type(hidden_states)}")
+        
+        # print(f'forward_ctx is {forward_ctx}')
+        print(f'afd_metadata is {afd_metadata}')
+        print(f'afd_connector is {afd_connector}')
+        print(f'hidden_states is {hidden_states}')
         if residual is None:
             residual = hidden_states.clone()
             hidden_states = self.input_layernorm(hidden_states)
@@ -1158,7 +1166,22 @@ class DeepseekV2DecoderLayer(nn.Module):
 
         # Fully Connected
         hidden_states, residual = self.post_attention_layernorm(hidden_states, residual)
-        afd_connector.send_attn_output(hidden_states, None)
+        # ---------ascend ffn need data
+        moe_comm_method = forward_ctx.moe_comm_method_name
+        num_tokens = hidden_states.shape[0]
+        with_prefill = forward_ctx.with_prefill
+        num_actual_tokens = None
+        ascend_ffn_need_forward_data = FFNNeedForwardData(moe_comm_method,num_tokens,with_prefill,num_actual_tokens)
+        
+        metadata = AFDConnectorMetadata.create_attention_metadata(
+            layer_idx=self.layer_idx,
+            stage_idx=0,
+            seq_len=hidden_states.shape[0],
+            dtype=hidden_states.dtype,
+            device=hidden_states.device,
+            ascend_ffn_need_forward_data=ascend_ffn_need_forward_data
+        )
+        afd_connector.send_attn_output(hidden_states, metadata)
         hidden_states, _ = afd_connector.recv_ffn_output()
 
         if self.role == "attention":
@@ -1181,11 +1204,13 @@ class DeepseekV2DecoderLayer(nn.Module):
         hidden_states: torch.Tensor,
         residual: Optional[torch.Tensor],
     ) -> torch.Tensor:        # Self Attention
+        print(f'hidden_states shape is {hidden_states.shape}')
         if residual is None:
             residual = hidden_states.clone()
             hidden_states = self.input_layernorm(hidden_states)
         else:
             hidden_states, residual = self.input_layernorm(hidden_states, residual)
+        
         hidden_states = self.self_attn(
             positions=positions,
             hidden_states=hidden_states,
