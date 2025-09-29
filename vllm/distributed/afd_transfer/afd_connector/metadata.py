@@ -9,6 +9,19 @@ from typing import Optional
 
 import torch
 
+class FFNNeedForwardData:
+
+    def __init__(self,
+                 moe_comm_method,
+                 num_input_tokens,
+                 with_prefill,
+                 total_num_scheduled_tokens,
+                 is_dummy_run:bool = False):
+        self.moe_comm_method = moe_comm_method
+        self.num_input_tokens = num_input_tokens
+        self.with_prefill = with_prefill
+        self.total_num_scheduled_tokens = total_num_scheduled_tokens
+        self.is_dummy_run = is_dummy_run
 
 @dataclass
 class AFDConnectorMetadata:
@@ -25,6 +38,8 @@ class AFDConnectorMetadata:
     # Optional fields for debugging and extensibility
     request_id: Optional[str] = None
     timestamp: Optional[float] = None
+    """ascend ffn need forward data"""
+    ascend_ffn_need_forward_data: Optional[FFNNeedForwardData] = None
 
     def __post_init__(self):
         """Validate data consistency."""
@@ -61,7 +76,8 @@ class AFDConnectorMetadata:
             seq_len: int,
             dtype: torch.dtype,
             device: torch.device,
-            request_id: Optional[str] = None) -> "AFDConnectorMetadata":
+            request_id: Optional[str] = None,
+            ascend_ffn_need_forward_data:Optional[FFNNeedForwardData] = None) -> "AFDConnectorMetadata":
         """Create metadata for attention side (single sequence)."""
         return cls(layer_idx=layer_idx,
                    stage_idx=stage_idx,
@@ -69,6 +85,7 @@ class AFDConnectorMetadata:
                    dtype=dtype,
                    device=device,
                    request_id=request_id,
+                   ascend_ffn_need_forward_data = ascend_ffn_need_forward_data,
                    timestamp=time.time())
 
     @classmethod
