@@ -276,5 +276,8 @@ class DefaultModelLoader(BaseModelLoader):
             # print("loaded_weights=", loaded_weights)
             if weights_not_loaded:
                 pass
+                # TODO HXY ffn侧还有mlp.gate的问题，这个问题暂时不好解，后续再说
+                # 因为直接用的SharedFusedMoE，而sharedFusedMoE里自带了gate的逻辑与注册，所以不好删
+                # 而且gate那边DeepseekV2MLP的__init__里注册的变量，应该是需要删掉的
                 # raise ValueError("Following weights were not initialized from "
                 #                  f"checkpoint: {weights_not_loaded}")

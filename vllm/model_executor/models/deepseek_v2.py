@@ -122,6 +122,7 @@ class DeepseekV2MoE(nn.Module):
         parallel_config: ParallelConfig,
         quant_config: Optional[QuantizationConfig] = None,
         prefix: str = "",
+        enable_afd: Optional[bool] = False,
     ):
         super().__init__()
         self.tp_size = get_tensor_model_parallel_world_size()
@@ -141,17 +142,17 @@ class DeepseekV2MoE(nn.Module):
             raise ValueError(f"Unsupported activation: {config.hidden_act}. "
                              "Only silu is supported for now.")
 
-        #----------- 这部分要加下判断，只在不开启AFD的时候加载
-        self.gate = ReplicatedLinear(config.hidden_size,
-                                     config.n_routed_experts,
-                                     bias=False,
-                                     quant_config=None,
-                                     prefix=f"{prefix}.gate")
-        if config.topk_method == "noaux_tc":
-            self.gate.e_score_correction_bias = nn.Parameter(
-                torch.empty(config.n_routed_experts, dtype=torch.float32))
-        else:
-            self.gate.e_score_correction_bias = None
+        if not enable_afd:
+            self.gate = ReplicatedLinear(config.hidden_size,
+                                        config.n_routed_experts,
+                                        bias=False,
+                                        quant_config=None,
+                                        prefix=f"{prefix}.gate")
+            if config.topk_method == "noaux_tc":
+                self.gate.e_score_correction_bias = nn.Parameter(
+                    torch.empty(config.n_routed_experts, dtype=torch.float32))
+            else:
+                self.gate.e_score_correction_bias = None
 
         # Load balancing settings.
         eplb_config = parallel_config.eplb_config
@@ -167,6 +168,7 @@ class DeepseekV2MoE(nn.Module):
                                       self.n_local_physical_experts)
         self.physical_expert_end = (self.physical_expert_start +
                                     self.n_local_physical_experts)
+
 
         if config.n_shared_experts is None:
             self.experts = FusedMoE(
@@ -184,7 +186,7 @@ class DeepseekV2MoE(nn.Module):
                 scoring_func=config.scoring_func,
                 # we do scaling outside, set factor to 1.0 to avoid double mul
                 routed_scaling_factor=1.0,
-                e_score_correction_bias=self.gate.e_score_correction_bias,
+                e_score_correction_bias=self.gate.e_score_correction_bias if not enable_afd else None,
                 enable_eplb=self.enable_eplb,
                 num_redundant_experts=self.n_redundant_experts,
                 is_sequence_parallel=self.is_sequence_parallel,
@@ -220,7 +222,7 @@ class DeepseekV2MoE(nn.Module):
                 scoring_func=config.scoring_func,
                 # we do scaling outside, set factor to 1.0 to avoid double mul
                 routed_scaling_factor=1.0,
-                e_score_correction_bias=self.gate.e_score_correction_bias,
+                e_score_correction_bias=self.gate.e_score_correction_bias if not enable_afd else None,
                 enable_eplb=self.enable_eplb,
                 num_redundant_experts=self.n_redundant_experts,
                 is_sequence_parallel=self.is_sequence_parallel,
@@ -645,6 +647,7 @@ class DeepseekV2DecoderLayer(nn.Module):
                     parallel_config=parallel_config,
                     quant_config=quant_config,
                     prefix=f"{prefix}.mlp",
+                    enable_afd=True if self.role else False,
                 )
             else:
                 self.mlp = DeepseekV2MLP(
