@@ -227,7 +227,7 @@ class DeepseekV2MoE(nn.Module):
             )
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        print("DeepseekV2MoE forward")
+        # print("DeepseekV2MoE forward")
         num_tokens, hidden_dim = hidden_states.shape
         hidden_states = hidden_states.view(-1, hidden_dim)
 
@@ -657,7 +657,7 @@ class DeepseekV2DecoderLayer(nn.Module):
 
         if self.role is not None and self.role == "attention":
             if layer_idx < config.first_k_dense_replace:
-                print('开始加载attn侧的mlp')
+                # print('开始加载attn侧的mlp')
                 self.mlp = DeepseekV2MLP(
                     hidden_size=config.hidden_size,
                     intermediate_size=config.intermediate_size,
@@ -788,7 +788,7 @@ class DeepseekV2DecoderLayer(nn.Module):
         hidden_states: torch.Tensor,
         residual: Optional[torch.Tensor],
     ) -> torch.Tensor:        # Self Attention
-        print(f'hidden_states shape is {hidden_states.shape}')
+        # print(f'hidden_states shape is {hidden_states.shape}')
         if residual is None:
             residual = hidden_states
             hidden_states = self.input_layernorm(hidden_states)
@@ -831,18 +831,18 @@ class DeepseekV2DecoderLayer(nn.Module):
         topk_ids: Optional[torch.Tensor] = None,
         row_idx: Optional[torch.Tensor] = None,
         ):
-        print("compute_ffn_output in decode layer")
+        # print("compute_ffn_output in decode layer")
         if self.layer_idx < self.first_k_dense_replace:
-            print("not moe")
+            # print("not moe")
             return hidden_states
         assert self.role == "ffn"
         # afd_connector = get_afd_connector()
         # hidden_states = afd_connector.recv_attn_output()
-        hidden_states = self.mlp(hidden_states)
-        # hidden_states = self.mlp.afd_forward(hidden_states, 
-        #                             topk_weights,
-        #                             topk_ids,
-        #                             row_idx)
+        # hidden_states = self.mlp(hidden_states)
+        hidden_states = self.mlp.afd_forward(hidden_states, 
+                                    topk_weights,
+                                    topk_ids,
+                                    row_idx)
         if isinstance(self.mlp,
                       DeepseekV2MLP) and hidden_states.dtype == torch.float16:
             # Fix FP16 overflow
@@ -931,7 +931,7 @@ class DeepseekV2Model(nn.Module):
         topk_ids: Optional[torch.Tensor] = None,
         row_idx: Optional[torch.Tensor] = None,
     ) -> Union[torch.Tensor, IntermediateTensors]:
-        print("compute_ffn_output in DeepseekV2Model")
+        # print("compute_ffn_output in DeepseekV2Model")
         hidden_states = self.layers[layer_idx].compute_ffn_output(hidden_states, 
                                                                     topk_weights,
                                                                     topk_ids,
@@ -1071,7 +1071,7 @@ class DeepseekV2ForCausalLM(nn.Module, SupportsPP, MixtureOfExperts,
         topk_ids: Optional[torch.Tensor] = None,
         row_idx: Optional[torch.Tensor] = None,
         ) -> Union[torch.Tensor, IntermediateTensors]:
-        print("compute_ffn_output in DeepseekV2ForCausalLM")
+        # print("compute_ffn_output in DeepseekV2ForCausalLM")
         hidden_states = self.model.compute_ffn_output(
                                     hidden_states, 
                                     current_layer_idx, 
