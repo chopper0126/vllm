@@ -287,12 +287,42 @@ class DeepseekV2MoE(nn.Module):
         ) -> torch.Tensor:
         # 这里是开了afd的forward，里面没东西，还得想想怎么同时接p2p和m2n算子……
         # 这样吧，这里直接调FUSEDMOE的东西，然后再加个是否需要routing的判断，来判断不同的分支
-        return self.experts.afd_ffn_compute(
+        num_tokens, hidden_dim = hidden_states.shape
+        fused_moe_out = self.experts.afd_ffn_compute(
             layer=self.experts, 
             hidden_states=hidden_states, 
             topk_weights=topk_weights, 
             topk_ids=topk_ids, 
             row_idx=row_idx)
+        if self.shared_experts is not None:
+            shared_output, final_hidden_states = fused_moe_out
+        else:
+            shared_output = None
+            final_hidden_states = fused_moe_out
+
+        # Fix FP16 overflow
+        # See DeepseekV2DecoderLayer for more details.
+        if hidden_states.dtype != torch.float16:
+            final_hidden_states *= self.routed_scaling_factor
+        elif self.shared_experts is not None:
+            assert shared_output is not None
+            shared_output *= (1. / self.routed_scaling_factor)
+
+        if self.shared_experts is not None:
+            assert shared_output is not None
+            final_hidden_states += shared_output
+
+        if self.is_sequence_parallel:
+            final_hidden_states = tensor_model_parallel_all_gather(
+                final_hidden_states, 0)
+            final_hidden_states = final_hidden_states[:num_tokens]
+        elif self.tp_size > 1:
+            final_hidden_states = (
+                self.experts.maybe_all_reduce_tensor_model_parallel(
+                    final_hidden_states))
+
+        return final_hidden_states.view(num_tokens, hidden_dim)
+
         # pass
 
 
