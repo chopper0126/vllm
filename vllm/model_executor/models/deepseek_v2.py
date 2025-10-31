@@ -281,6 +281,7 @@ class DeepseekV2MoE(nn.Module):
     def afd_forward(
         self, 
         hidden_states: torch.Tensor,
+        router_logits: Optional[torch.Tensor] = None,
         topk_weights: Optional[torch.Tensor] = None,
         topk_ids: Optional[torch.Tensor] = None,
         row_idx: Optional[torch.Tensor] = None,
@@ -291,6 +292,7 @@ class DeepseekV2MoE(nn.Module):
         fused_moe_out = self.experts.afd_ffn_compute(
             layer=self.experts, 
             hidden_states=hidden_states, 
+            router_logits = router_logits,
             topk_weights=topk_weights, 
             topk_ids=topk_ids, 
             row_idx=row_idx)
@@ -785,6 +787,7 @@ class DeepseekV2DecoderLayer(nn.Module):
             topk_weights, topk_ids, row_idx = self.afd_gating.gating(hidden_states=hidden_states, 
                                                     router_logits=router_logits)
 
+            # TODO:每推理一个token 传一次
             metadata = AFDConnectorMetadata.create_attention_metadata(
                 layer_idx=self.layer_idx,
                 stage_idx=0,
@@ -792,12 +795,8 @@ class DeepseekV2DecoderLayer(nn.Module):
                 dtype=hidden_states.dtype,
                 device=hidden_states.device,
                 ffn_need_forward_data=ffn_need_forward_data,
-                topk_weights = topk_weights,
-                topk_ids = topk_ids,
-                row_idx = row_idx
             )
-
-            afd_connector.send_attn_output(hidden_states, metadata)
+            afd_connector.send_attn_output(hidden_states,router_logits,topk_weights, topk_ids, row_idx, metadata)
             hidden_states, _ = afd_connector.recv_ffn_output()
 
             if self.role == "attention":
@@ -859,7 +858,8 @@ class DeepseekV2DecoderLayer(nn.Module):
 
     def compute_ffn_output(
         self, 
-        hidden_states,
+        hidden_states: torch.Tensor,
+        router_logits: Optional[torch.Tensor] = None,
         topk_weights: Optional[torch.Tensor] = None,
         topk_ids: Optional[torch.Tensor] = None,
         row_idx: Optional[torch.Tensor] = None,
@@ -872,7 +872,9 @@ class DeepseekV2DecoderLayer(nn.Module):
         # afd_connector = get_afd_connector()
         # hidden_states = afd_connector.recv_attn_output()
         # hidden_states = self.mlp(hidden_states)
+        print('layer_index=', self.layer_idx)
         hidden_states = self.mlp.afd_forward(hidden_states, 
+                                    router_logits,
                                     topk_weights,
                                     topk_ids,
                                     row_idx)
@@ -960,12 +962,14 @@ class DeepseekV2Model(nn.Module):
         self,
         hidden_states,
         layer_idx,
+        router_logits: Optional[torch.Tensor] = None,
         topk_weights: Optional[torch.Tensor] = None,
         topk_ids: Optional[torch.Tensor] = None,
         row_idx: Optional[torch.Tensor] = None,
     ) -> Union[torch.Tensor, IntermediateTensors]:
         # print("compute_ffn_output in DeepseekV2Model")
         hidden_states = self.layers[layer_idx].compute_ffn_output(hidden_states, 
+                                                                    router_logits,
                                                                     topk_weights,
                                                                     topk_ids,
                                                                     row_idx)
@@ -1100,6 +1104,7 @@ class DeepseekV2ForCausalLM(nn.Module, SupportsPP, MixtureOfExperts,
         self,
         current_layer_idx,
         hidden_states,
+        router_logits: Optional[torch.Tensor] = None,
         topk_weights: Optional[torch.Tensor] = None,
         topk_ids: Optional[torch.Tensor] = None,
         row_idx: Optional[torch.Tensor] = None,
@@ -1108,6 +1113,7 @@ class DeepseekV2ForCausalLM(nn.Module, SupportsPP, MixtureOfExperts,
         hidden_states = self.model.compute_ffn_output(
                                     hidden_states, 
                                     current_layer_idx, 
+                                    router_logits,
                                     topk_weights,
                                     topk_ids,
                                     row_idx)
