@@ -1022,6 +1022,7 @@ class DeepseekV2Model(nn.Module):
                 seq_len=hidden_states.shape[0],
                 dtype=hidden_states.dtype,
                 device=hidden_states.device,
+                num_ubatches=1,
                 ffn_need_forward_data=ffn_need_forward_data,
                 m2n_afdconnector_data=m2n_afdconnector_data if self.connector_name == "m2nconnector" else None,
                 cam_afdconnector_data=cam_afdconnector_data if self.connector_name == "camconnector" else None,
@@ -1102,12 +1103,12 @@ class DeepseekV2Model(nn.Module):
 
                 if layer_idx > self.first_k_dense_replace:
                     if self.connector_name == "m2nconnector":
-                        torchair.ops.npu_print("before recv_ffn_output,ubatch_hidden_states[ubatch_idx]=", ubatch_hidden_states[ubatch_idx],"layer.layer_idx is " ,layer.layer_idx,"ubatch_idx is ",ubatch_idx, summarize_size=2)
                         recv_hidden_states = afd_connector.recv_ffn_output(ubatch_hidden_states[ubatch_idx],
                                                                            ubatch_metadata[ubatch_idx])
                     elif self.connector_name == "camconnector":
                         recv_hidden_states = afd_connector.recv_ffn_output(ubatch_hidden_states[ubatch_idx],
-                                                                           ubatch_metadata[ubatch_idx])
+                                                                           ubatch_metadata[ubatch_idx],
+                                                                           ubatch_idx=ubatch_idx)
                     else:
                         recv_hidden_states, _ = afd_connector.recv_ffn_output()
                     ubatch_hidden_states[ubatch_idx].copy_(recv_hidden_states)
@@ -1126,7 +1127,6 @@ class DeepseekV2Model(nn.Module):
                         f"ttg deepseekv2 layer_idx:{layer.layer_idx} start_loc:{afd_metadata.afd_tokens_start_loc} "
                         f"start_idx:{start_idx} end_idx:{end_idx} "
                         f"stage_idx:{afd_metadata.afd_stage_idx}")
-                torchair.ops.npu_print("before compute_attn_output,current_hidden= ", current_hidden,"layer.layer_idx is " ,layer.layer_idx,"ubatch_idx is ",ubatch_idx,summarize_size=2)
                 current_hidden, current_residual, topk_weights, topk_ids, row_idx, router_logits = \
                     layer.compute_attn_output(current_positions, current_hidden, current_residual)
                 if self.connector_name == "m2nconnector":
@@ -1162,16 +1162,18 @@ class DeepseekV2Model(nn.Module):
                     ffn_need_forward_data=ffn_need_forward_data,
                     m2n_afdconnector_data=m2n_afdconnector_data if self.connector_name == "m2nconnector" else None,
                     cam_afdconnector_data=cam_afdconnector_data if self.connector_name == "camconnector" else None,
+                    num_ubatches=num_ubatches
                 )
                 ubatch_metadata[ubatch_idx] = metadata
 
                 if self.connector_name == "m2nconnector":
-                    #logger.info(f"ttg deepseekv2 layer_idx:{layer.layer_idx} start send_attn_output")
-                    torchair.ops.npu_print("before send_attn_output,current_hidden= ", current_hidden,"layer.layer_idx is " ,layer.layer_idx,"ubatch_idx is ",ubatch_idx,summarize_size=2)
                     handle = afd_connector.send_attn_output(current_hidden, topk_weights, topk_ids, metadata)
                     ubatch_metadata[ubatch_idx].m2n_afdconnector_data.handle = handle
                 elif self.connector_name == "camconnector":
-                    afd_connector.send_attn_output(current_hidden, topk_weights, topk_ids, metadata)
+                    output_list = afd_connector.send_attn_output(current_hidden, topk_weights, topk_ids, metadata, ubatch_idx)
+                    hidden_states1, dynamic_scales, expandIdx, expertTokenNums, epRecvCounts, simulateExpertIds, simulateExpertScales, attenBatchSize = output_list[0:8]
+                    handle = [simulateExpertIds, simulateExpertScales, expandIdx, epRecvCounts, attenBatchSize]
+                    ubatch_metadata[ubatch_idx].cam_afdconnector_data.handle = handle
                 else:
                     afd_connector.send_attn_output(hidden_states=current_hidden,
                                                    router_logits=router_logits,
@@ -1180,27 +1182,24 @@ class DeepseekV2Model(nn.Module):
                                                    row_idx=row_idx,
                                                    metadata=metadata)
                 ubatch_residual[ubatch_idx] = current_residual
-            #logger.info(f"ttg deepseekv2 layer_idx:{layer.layer_idx} finish")
 
         for ubatch_idx in range(num_ubatches):
             if self.connector_name == "m2nconnector":
-                torchair.ops.npu_print("last before recv_ffn_output,ubatch_hidden_states[ubatch_idx]= ", ubatch_hidden_states[ubatch_idx],"layer.layer_idx is " ,layer.layer_idx,"ubatch_idx is ",ubatch_idx,summarize_size=2)
                 recv_hidden_states = afd_connector.recv_ffn_output(ubatch_hidden_states[ubatch_idx],
                                                                    ubatch_metadata[ubatch_idx])
             elif self.connector_name == "camconnector":
                 recv_hidden_states = afd_connector.recv_ffn_output(ubatch_hidden_states[ubatch_idx],
-                                                                   ubatch_metadata[ubatch_idx])
+                                                                   ubatch_metadata[ubatch_idx],
+                                                                   ubatch_idx=ubatch_idx)
             else:
                 recv_hidden_states, _ = afd_connector.recv_ffn_output()
             ubatch_hidden_states[ubatch_idx].copy_(recv_hidden_states)
 
-        #logger.info(f"ttg deepseekv2 start cat hidden_states results")
         hidden_states = torch.cat([
             ubatch_hidden_states[i][:afd_metadata.afd_tokens_lens[i]]
             for i in range(num_ubatches)
         ], dim=0)
 
-        #logger.info(f"ttg deepseekv2 start cat residual results")
         if ubatch_residual[0] is not None:
             residual = torch.cat([
                 ubatch_residual[i][:afd_metadata.afd_tokens_lens[i]]
@@ -1210,8 +1209,6 @@ class DeepseekV2Model(nn.Module):
             ], dim=0)
         else:
             residual = None
-
-        #logger.info(f"ttg deepseekv2 finish forward")
 
         return hidden_states, residual
     

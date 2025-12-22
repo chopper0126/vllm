@@ -105,6 +105,7 @@ class AFDConnectorMetadata:
     # multiple sequences
     dtype: torch.dtype
     device: torch.device
+    num_ubatches: int = 1
     topk_idx: Optional[torch.Tensor] = None # indices token which expert to be sended
     topk_weights: Optional[torch.Tensor] = None # the expert weights
     moe_expert_num: Optional[int] = None # number of moe experts
@@ -168,7 +169,8 @@ class AFDConnectorMetadata:
             # extra_fields: AFDExtraFields = field(default_factory=AFDExtraFields),
             topk_weights: Optional[torch.Tensor] = None,
             topk_ids: Optional[torch.Tensor] = None,
-            row_idx: Optional[torch.Tensor] = None) -> "AFDConnectorMetadata":
+            row_idx: Optional[torch.Tensor] = None,
+            num_ubatches: int = 1) -> "AFDConnectorMetadata":
         """Create metadata for attention side (single sequence)."""
         return cls(layer_idx=layer_idx,
                    stage_idx=stage_idx,
@@ -176,6 +178,7 @@ class AFDConnectorMetadata:
                    dtype=dtype,
                    device=device,
                    request_id=request_id,
+                   num_ubatches=num_ubatches,
                 #    timestamp=time.time(),
                    ffn_need_forward_data=ffn_need_forward_data,
                    m2n_afdconnector_data=m2n_afdconnector_data,
