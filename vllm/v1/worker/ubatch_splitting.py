@@ -122,7 +122,7 @@ def create_ubatch_slices(
     start_token = 0
 
     # Add the end point to the split points to make iteration easier
-    all_points = token_split_points + [cu_num_tokens[-1]]
+    all_points = token_split_points + [int(cu_num_tokens[-1])]
 
     for end_token in all_points:
         token_slice = slice(start_token, end_token)

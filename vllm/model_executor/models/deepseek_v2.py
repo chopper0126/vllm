@@ -1104,7 +1104,9 @@ class DeepseekV2Model(nn.Module):
                 if layer_idx > self.first_k_dense_replace:
                     if self.connector_name == "m2nconnector":
                         recv_hidden_states = afd_connector.recv_ffn_output(ubatch_hidden_states[ubatch_idx],
-                                                                           ubatch_metadata[ubatch_idx])
+                                                                           ubatch_metadata[ubatch_idx],ubatch_idx)
+                        # recv_hidden_states = afd_connector.recv_ffn_output(ubatch_hidden_states[ubatch_idx],
+                        #                                                    ubatch_metadata[ubatch_idx],ubatch_idx)
                     elif self.connector_name == "camconnector":
                         recv_hidden_states = afd_connector.recv_ffn_output(ubatch_hidden_states[ubatch_idx],
                                                                            ubatch_metadata[ubatch_idx],
@@ -1186,7 +1188,9 @@ class DeepseekV2Model(nn.Module):
         for ubatch_idx in range(num_ubatches):
             if self.connector_name == "m2nconnector":
                 recv_hidden_states = afd_connector.recv_ffn_output(ubatch_hidden_states[ubatch_idx],
-                                                                   ubatch_metadata[ubatch_idx])
+                                                                   ubatch_metadata[ubatch_idx],ubatch_idx)
+                # recv_hidden_states = afd_connector.recv_ffn_output(ubatch_hidden_states[ubatch_idx],
+                #                                                    ubatch_metadata[ubatch_idx],ubatch_idx)
             elif self.connector_name == "camconnector":
                 recv_hidden_states = afd_connector.recv_ffn_output(ubatch_hidden_states[ubatch_idx],
                                                                    ubatch_metadata[ubatch_idx],
