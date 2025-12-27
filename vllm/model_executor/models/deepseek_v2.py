@@ -1047,10 +1047,6 @@ class DeepseekV2Model(nn.Module):
                                                metadata = metadata)
                 hidden_states, _ = afd_connector.recv_ffn_output()
                 
-            
-
-            if dbo_enabled():
-                dbo_yield()
         return hidden_states, residual
 
     def forward_m2n_ubatch(
