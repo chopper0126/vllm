@@ -263,7 +263,7 @@ class SharedStorageConnector(KVConnectorBase_V1):
         # with the block granularity. And it expects the returned blocks and
         # num_computed_tokens to also be aligned with the block granularity.
         print(f'yxj debug get_num_new_matched_tokens ===')
-        return len(request.porompt_token_ids) - 1, False
+        return len(request.prompt_token_ids) - 1, False
         if not self._found_match_for_request(request):
             return 0, False
 

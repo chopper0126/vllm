@@ -47,6 +47,9 @@ class AFDConfig:
 
     compute_gate_on_attention: bool = False
     """Whether to compute the gate on the attention side."""
+    
+    quant_mode: int = 0
+    """Quant mode of this AFD connector."""
 
     def compute_hash(self) -> str:
         """
