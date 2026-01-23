@@ -1,0 +1,218 @@
+{
+ "binFileName": "E2a_9309516320f6bc47b8d4817b3055b800",
+ "binFileSuffix": ".o",
+ "blockDim": -1,
+ "coreType": "MIX",
+ "intercoreSync": 1,
+ "kernelName": "E2a_9309516320f6bc47b8d4817b3055b800",
+ "magic": "RT_DEV_BINARY_MAGIC_ELF",
+ "memoryStamping": [],
+ "opParaSize": 396,
+ "parameters": [
+  null,
+  null,
+  null,
+  null,
+  null,
+  null,
+  null,
+  null,
+  null
+ ],
+ "sha256": "92073e21b8b049b28530332211f2da5a0caf7114cc245bc909a2418cffbf5933",
+ "workspace": {
+  "num": 1,
+  "size": [
+   -1
+  ],
+  "type": [
+   0
+  ]
+ },
+ "taskRation": "0:1",
+ "kernelList": [
+  {
+   "kernelName": "E2a_9309516320f6bc47b8d4817b3055b800_21"
+  }
+ ],
+ "optionalInputMode": "gen_placeholder",
+ "optionalOutputMode": "gen_placeholder",
+ "supportSuperKernel": 1,
+ "compileInfo": {},
+ "supportInfo": {
+  "implMode": "high_performance",
+  "int64Mode": false,
+  "simplifiedKeyMode": 0,
+  "simplifiedKey": [
+   "E2a/d=0,p=1/27,2/3,2/0,2/3,2/3,2/1,2/3,2/27,2",
+   "E2a/d=0,p=0/27,2/3,2/0,2/3,2/3,2/1,2/3,2/27,2",
+   "E2a/d=1,p=1/27,2/3,2/0,2/3,2/3,2/1,2/3,2/27,2",
+   "E2a/d=1,p=0/27,2/3,2/0,2/3,2/3,2/1,2/3,2/27,2"
+  ],
+  "optionalInputMode": "gen_placeholder",
+  "optionalOutputMode": "gen_placeholder",
+  "staticKey": "2691fe1cc1bf4d053ff845d7071befcd5034493142b3a1c4f961b102fbe5b7fc,7734dd74cb437d3ff6a296d0b5b0daad684c5ecdf5fcc9f70ed6eb64add91b89",
+  "inputs": [
+   {
+    "name": "expandXOut",
+    "index": 0,
+    "dtype": "bfloat16",
+    "format": "ND",
+    "paramType": "required",
+    "shape": [
+     -2
+    ],
+    "format_match_mode": "FormatAgnostic"
+   },
+   {
+    "name": "simulateExpertIds",
+    "index": 1,
+    "dtype": "int32",
+    "format": "ND",
+    "paramType": "required",
+    "shape": [
+     -2
+    ],
+    "format_match_mode": "FormatAgnostic"
+   },
+   {
+    "name": "simulateExpertScales",
+    "index": 2,
+    "dtype": "float32",
+    "format": "ND",
+    "paramType": "required",
+    "shape": [
+     -2
+    ],
+    "format_match_mode": "FormatAgnostic"
+   },
+   {
+    "name": "expandIdx",
+    "index": 3,
+    "dtype": "int32",
+    "format": "ND",
+    "paramType": "required",
+    "shape": [
+     -2
+    ],
+    "format_match_mode": "FormatAgnostic"
+   },
+   {
+    "name": "epRecvCounts",
+    "index": 4,
+    "dtype": "int32",
+    "format": "ND",
+    "paramType": "required",
+    "shape": [
+     -2
+    ],
+    "format_match_mode": "FormatAgnostic"
+   },
+   {
+    "name": "commArgs",
+    "index": 5,
+    "dtype": "float16",
+    "format": "ND",
+    "paramType": "required",
+    "shape": [
+     -2
+    ],
+    "format_match_mode": "FormatAgnostic"
+   },
+   {
+    "name": "attenBatchSize",
+    "index": 6,
+    "dtype": "int32",
+    "format": "ND",
+    "paramType": "required",
+    "shape": [
+     -2
+    ],
+    "format_match_mode": "FormatAgnostic"
+   }
+  ],
+  "outputs": [
+   {
+    "name": "expandX",
+    "index": 0,
+    "dtype": "bfloat16",
+    "format": "ND",
+    "paramType": "required",
+    "shape": [
+     -2
+    ],
+    "format_match_mode": "FormatAgnostic"
+   }
+  ],
+  "attrs": [
+   {
+    "name": "magic",
+    "dtype": "int",
+    "value": 0
+   },
+   {
+    "name": "batchSize",
+    "dtype": "int",
+    "value": 0
+   },
+   {
+    "name": "hiddenSize",
+    "dtype": "int",
+    "value": 0
+   },
+   {
+    "name": "topk",
+    "dtype": "int",
+    "value": 0
+   },
+   {
+    "name": "expertRankSize",
+    "dtype": "int",
+    "value": 0
+   },
+   {
+    "name": "attentionRankSize",
+    "dtype": "int",
+    "value": 0
+   },
+   {
+    "name": "sharedExpertNum",
+    "dtype": "int",
+    "value": 0
+   },
+   {
+    "name": "totalExpertNum",
+    "dtype": "int",
+    "value": 0
+   },
+   {
+    "name": "rank",
+    "dtype": "int",
+    "value": 0
+   },
+   {
+    "name": "loadBalancingRankNum",
+    "dtype": "int",
+    "value": 0
+   },
+   {
+    "name": "loadBalancingThreshold",
+    "dtype": "int",
+    "value": 0
+   },
+   {
+    "name": "groupEp",
+    "dtype": "str",
+    "value": ""
+   },
+   {
+    "name": "aivNum",
+    "dtype": "int",
+    "value": 0
+   }
+  ],
+  "opMode": "dynamic",
+  "deterministic": "ignore"
+ },
+ "filePath": "ascend910_93_proj/build_out/op_kernel/binary/"
+}
