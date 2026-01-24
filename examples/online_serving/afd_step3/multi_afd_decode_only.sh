@@ -24,13 +24,13 @@ export HCCL_SOCKET_IFNAME=${IF_NAME}
 export GLOO_SOCKET_IFNAME=${IF_NAME}
 export TP_SOCKET_IFNAME=${IF_NAME}
 export HCCL_BUFFSIZE=2048
-export HCCL_EXEC_TIMEOUT=100
+export HCCL_EXEC_TIMEOUT=10000
 export ASCEND_LAUNCH_BLOCKING=0
 export PYTORCH_NPU_ALLOC_CONF=max_split_size_mb:256
-export HCCL_CONNECT_TIMEOUT=1800
 # export MASTER_ADDR="141.71.73.131" 
 # export MASTER_PORT="29500"
 
+# export ASCEND_RT_VISIBLE_DEVICES=0,1,2,3,4,5,6,7,8,9
 export ASCEND_RT_VISIBLE_DEVICES=0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15
 # export ASCEND_RT_VISIBLE_DEVICES=0,1
 
@@ -49,24 +49,25 @@ source /usr/local/Ascend/ascend-toolkit/latest/opp/vendors/CAM/bin/set_env.bash
 # 日志设置
 # (需配置项)基础日志路径设置
 timestamp=$(date +"%Y-%m-%d-%H-%M-%S")
-ALL_LOGS=/home/y00889327/workspace-afd/vllm-logs/${timestamp}/
+ALL_LOGS=/home/y00889327/workspace-afd/vllm-logs/${timestamp}
+# mkdir -p "${ALL_LOGS}"
 
-# CANN日志设置
+# # CANN日志设置
 mkdir -p "${ALL_LOGS}"/CANN/"${HCCL_IF_IP}"
 export ASCEND_PROCESS_LOG_PATH=${ALL_LOGS}/CANN/${HCCL_IF_IP}
 # 是否开启日志打屏。开启后，日志将不会保存在log文件中，而是将产生的日志直接打屏显示。
 export ASCEND_SLOG_PRINT_TO_STDOUT=0
 # 设置日志级别。1为INFO，2为WARNING
-export ASCEND_GLOBAL_LOG_LEVEL=2
+export ASCEND_GLOBAL_LOG_LEVEL=3
 # 设置应用类日志是否开启Event日志。
 export ASCEND_GLOBAL_EVENT_ENABLE=1
 # 指定Device侧应用类日志回传到Host侧的延时时间。
-export ASCEND_LOG_DEVICE_FLUSH_TIMEOUT=2000
+# export ASCEND_LOG_DEVICE_FLUSH_TIMEOUT=2000
 # 指定日志拥塞处理方式。0：默认处理方式，在日志拥塞或IO访问性能差的情况下，为保证业务性能不劣化，系统可能会丢失日志。1：在日志拥塞或IO访问性能差的情况下，不丢失日志。该方式下，为便于问题定位，建议配置为1。
 export ASCEND_LOG_SYNC_SAVE=0
 
 # 应用日志设置
-export VLLM_LOGGING_LEVEL=DEBUG
+export VLLM_LOGGING_LEVEL=WARNING
 APP_LOG_PATH=${ALL_LOGS}/"$1".log
 #         --quantization ascend \
 #         --served-model-name deepseek_v3 \
@@ -75,6 +76,8 @@ APP_LOG_PATH=${ALL_LOGS}/"$1".log
 #        --dbo-prefill-token-threshold 12 \
 #        --dbo-decode-token-threshold 2 \
 # --compilation-config '{"cudagraph_mode": "FULL_DECODE_ONLY","cudagraph_capture_sizes":[20]}' \
+# 
+#           "quant_mode": "1"
 # (需配置项)应用启动参数配置
 if [ "$1" == 'attention' ]; then
     vllm serve $MODEL_PATH \
@@ -95,6 +98,23 @@ if [ "$1" == 'attention' ]; then
         --dbo-prefill-token-threshold 12 \
         --dbo-decode-token-threshold 2 \
         --compilation-config '{"cudagraph_mode": "FULL_DECODE_ONLY","cudagraph_capture_sizes":[20]}'  \
+        --kv-transfer-config  \
+        '{
+           "kv_connector": "SharedStorageConnector",
+           "kv_role": "kv_consumer",
+           "kv_port": "30200",
+           "engine_id": "2",
+           "kv_connector_extra_config": {
+             "prefill": {
+               "dp_size": 1,
+               "tp_size": 16
+             },
+             "decode": {
+               "dp_size": 16,
+               "tp_size": 1
+             }
+           }
+        }' \
         --afd-config \
         '{
            "afd_connector": "camm2nconnector",
@@ -121,10 +141,27 @@ else
         --trust-remote-code \
         --no-enable-prefix-caching \
         --gpu-memory-utilization 0.9 \
+        --compilation-config '{"cudagraph_mode": "FULL_DECODE_ONLY","cudagraph_capture_sizes":[20]}'  \
         --enable-dbo \
         --dbo-prefill-token-threshold 12 \
         --dbo-decode-token-threshold 2 \
-	--compilation-config '{"cudagraph_mode": "FULL_DECODE_ONLY","cudagraph_capture_sizes":[20]}'  \
+        --kv-transfer-config  \
+        '{
+           "kv_connector": "SharedStorageConnector",
+           "kv_role": "kv_consumer",
+           "kv_port": "30200",
+           "engine_id": "2",
+           "kv_connector_extra_config": {
+             "prefill": {
+               "dp_size": 1,
+               "tp_size": 16
+             },
+             "decode": {
+               "dp_size": 1,
+               "tp_size": 16
+             }
+           }
+        }' \
         --afd-config \
         '{
            "afd_connector": "camm2nconnector",
