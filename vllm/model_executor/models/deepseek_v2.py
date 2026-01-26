@@ -350,7 +350,8 @@ class DeepseekV2MoE(nn.Module):
 
         if self.shared_experts is not None:
             assert shared_output is not None
-            final_hidden_states += shared_output
+            # final_hidden_states += shared_output
+            # print(f'final_hidden_states shape is {final_hidden_states.shape}')
 
         if self.is_sequence_parallel:
             final_hidden_states = tensor_model_parallel_all_gather(
@@ -874,20 +875,18 @@ class DeepseekV2DecoderLayer(nn.Module):
             global_redundant_expert_num = 0
             enable_force_load_balance = True
             if enable_force_load_balance:
-                random_matrix = torch.rand(topk_ids.size(0),
-                                        global_num_experts -
-                                        global_redundant_expert_num,
-                                        device=topk_ids.device)
-                topk_ids = torch.argsort(
-                    random_matrix, dim=1)[:, :topk_ids.size(1)].to(topk_ids.dtype)
+                # random_matrix = torch.rand(topk_ids.size(0),
+                #                         global_num_experts -
+                #                         global_redundant_expert_num,
+                #                         device=topk_ids.device)
+                # topk_ids = torch.argsort(
+                #     random_matrix, dim=1)[:, :topk_ids.size(1)].to(topk_ids.dtype)
+                # 固定选前8个专家
+                topk_ids = torch.arange(8, device=topk_ids.device) \
+                                .unsqueeze(0) \
+                                .expand(topk_ids.size(0), -1) \
+                                .to(topk_ids.dtype)
                 
-            # # vllm ascend v0.11
-            # # this is a naive implementation for experts load balance so as
-            # # to avoid accumulating too much tokens on a single rank.
-            # # currently it is only activated when doing profile runs.
-            # if enable_force_load_balance:
-            #     topk_ids = torch.randint_like(
-            #         topk_ids, 0, global_num_experts - global_redundant_expert_num)
         return hidden_states, residual, topk_weights, topk_ids, row_idx ,router_logits
 
     def compute_ffn_output(self,

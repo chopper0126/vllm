@@ -75,7 +75,7 @@ APP_LOG_PATH=${ALL_LOGS}/"$1".log
 #         --enable-dbo \
 #        --dbo-prefill-token-threshold 12 \
 #        --dbo-decode-token-threshold 2 \
-# --compilation-config '{"cudagraph_mode": "FULL_DECODE_ONLY","cudagraph_capture_sizes":[20]}' \
+# --compilation-config '{"cudagraph_mode": "FULL_DECODE_ONLY","cudagraph_capture_sizes":[12]}' \
 # 
 #           "quant_mode": "1"
 # (需配置项)应用启动参数配置
@@ -88,16 +88,16 @@ if [ "$1" == 'attention' ]; then
         --tensor-parallel-size 1 \
         --seed 1024 \
         --enable-expert-parallel \
-        --max-num-seqs 20 \
+        --max-num-seqs 12 \
         --max-model-len 4096 \
-        --max-num-batched-tokens 20 \
+        --max-num-batched-tokens 12 \
         --trust-remote-code \
         --no-enable-prefix-caching \
         --gpu-memory-utilization 0.9 \
         --enable-dbo \
         --dbo-prefill-token-threshold 12 \
         --dbo-decode-token-threshold 2 \
-        --compilation-config '{"cudagraph_mode": "FULL_DECODE_ONLY","cudagraph_capture_sizes":[20]}'  \
+        --compilation-config '{"cudagraph_mode": "FULL_DECODE_ONLY","cudagraph_capture_sizes":[12]}'  \
         --kv-transfer-config  \
         '{
            "kv_connector": "SharedStorageConnector",
@@ -135,13 +135,13 @@ else
         --seed 1024 \
         --enable-expert-parallel \
         --quantization ascend \
-        --max-num-seqs 20 \
+        --max-num-seqs 12 \
         --max-model-len 4096 \
-        --max-num-batched-tokens 20 \
+        --max-num-batched-tokens 12 \
         --trust-remote-code \
         --no-enable-prefix-caching \
         --gpu-memory-utilization 0.9 \
-        --compilation-config '{"cudagraph_mode": "FULL_DECODE_ONLY","cudagraph_capture_sizes":[20]}'  \
+        --compilation-config '{"cudagraph_mode": "FULL_DECODE_ONLY","cudagraph_capture_sizes":[12]}'  \
         --enable-dbo \
         --dbo-prefill-token-threshold 12 \
         --dbo-decode-token-threshold 2 \

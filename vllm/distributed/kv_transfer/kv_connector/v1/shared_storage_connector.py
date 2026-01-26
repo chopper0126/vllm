@@ -102,7 +102,7 @@ class SharedStorageConnector(KVConnectorBase_V1):
             The number of elements in kv_caches and layer_names should be 
             the same.
         """
-        print(f'yxj debug start_load_kv ===')
+        # print(f'yxj debug start_load_kv ===')
         return
         attn_metadata = forward_context.attn_metadata
 
@@ -262,7 +262,7 @@ class SharedStorageConnector(KVConnectorBase_V1):
         # NOTE: in current v1 scheduler, the num_computed_tokens is aligned
         # with the block granularity. And it expects the returned blocks and
         # num_computed_tokens to also be aligned with the block granularity.
-        print(f'yxj debug get_num_new_matched_tokens ===')
+        # print(f'yxj debug get_num_new_matched_tokens ===')
         return len(request.prompt_token_ids) - 1, False
         if not self._found_match_for_request(request):
             return 0, False
