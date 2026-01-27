@@ -13,7 +13,7 @@ pkill -9 VLLM
 pkill -9 python
 
 # (需配置项)权重路径
-MODEL_PATH="/home/c00945949/weight/DeepSeek-V3.1_w8a8mix_mtp/"
+MODEL_PATH="/home/y00889327/y00889327_dsv3_w8a8_mtp/"
 # MODEL_PATH="/home/lxf/DSV2LiteWeight"
 
 IF_NAME="enp8s0f4u1"
