@@ -13,7 +13,7 @@ pkill -9 VLLM
 pkill -9 python
 
 # (需配置项)权重路径
-MODEL_PATH="/home/y00889327/y00889327_dsv3_w8a8_mtp/"
+MODEL_PATH="/home/c00945949/weight/DeepSeek-V3.1_w8a8mix_mtp/"
 # MODEL_PATH="/home/lxf/DSV2LiteWeight"
 
 IF_NAME="enp8s0f4u1"
@@ -68,7 +68,6 @@ export ASCEND_LOG_SYNC_SAVE=0
 
 # 应用日志设置
 export VLLM_LOGGING_LEVEL=WARNING
-# export VLLM_LOGGING_LEVEL=WARNING
 APP_LOG_PATH=${ALL_LOGS}/"$1".log
 #         --quantization ascend \
 #         --served-model-name deepseek_v3 \
@@ -76,7 +75,7 @@ APP_LOG_PATH=${ALL_LOGS}/"$1".log
 #         --enable-dbo \
 #        --dbo-prefill-token-threshold 12 \
 #        --dbo-decode-token-threshold 2 \
-# --compilation-config '{"cudagraph_mode": "FULL_DECODE_ONLY","cudagraph_capture_sizes":[12]}' \
+# --compilation-config '{"cudagraph_mode": "FULL_DECODE_ONLY","cudagraph_capture_sizes":[20]}' \
 # 
 #           "quant_mode": "1"
 # (需配置项)应用启动参数配置
@@ -89,16 +88,16 @@ if [ "$1" == 'attention' ]; then
         --tensor-parallel-size 1 \
         --seed 1024 \
         --enable-expert-parallel \
-        --max-num-seqs 12 \
+        --max-num-seqs 20 \
         --max-model-len 4096 \
-        --max-num-batched-tokens 12 \
+        --max-num-batched-tokens 20 \
         --trust-remote-code \
         --no-enable-prefix-caching \
         --gpu-memory-utilization 0.9 \
         --enable-dbo \
         --dbo-prefill-token-threshold 12 \
         --dbo-decode-token-threshold 2 \
-        --compilation-config '{"cudagraph_mode": "FULL_DECODE_ONLY","cudagraph_capture_sizes":[12]}'  \
+        --compilation-config '{"cudagraph_mode": "FULL_DECODE_ONLY","cudagraph_capture_sizes":[20]}'  \
         --kv-transfer-config  \
         '{
            "kv_connector": "SharedStorageConnector",
@@ -136,13 +135,13 @@ else
         --seed 1024 \
         --enable-expert-parallel \
         --quantization ascend \
-        --max-num-seqs 12 \
+        --max-num-seqs 20 \
         --max-model-len 4096 \
-        --max-num-batched-tokens 12 \
+        --max-num-batched-tokens 20 \
         --trust-remote-code \
         --no-enable-prefix-caching \
         --gpu-memory-utilization 0.9 \
-        --compilation-config '{"cudagraph_mode": "FULL_DECODE_ONLY","cudagraph_capture_sizes":[12]}'  \
+        --compilation-config '{"cudagraph_mode": "FULL_DECODE_ONLY","cudagraph_capture_sizes":[20]}'  \
         --enable-dbo \
         --dbo-prefill-token-threshold 12 \
         --dbo-decode-token-threshold 2 \

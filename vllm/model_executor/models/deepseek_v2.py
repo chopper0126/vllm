@@ -73,6 +73,8 @@ from vllm.forward_context import AFDMetadata
 # TODO(jcz): need remove vllm_ascend dependency
 from vllm_ascend.ops.moe.experts_selector import select_experts
 from vllm_ascend.worker.ubatching import dbo_current_ubatch_id, dbo_yield, dbo_enabled
+from vllm_ascend.distributed.parallel_state import get_mc2_group
+from vllm.distributed import get_dp_group, get_ep_group
 
 class DeepseekV2MLP(nn.Module):
 
@@ -348,8 +350,8 @@ class DeepseekV2MoE(nn.Module):
             assert shared_output is not None
             shared_output *= (1. / self.routed_scaling_factor)
 
-        if self.shared_experts is not None:
-            assert shared_output is not None
+        # if self.shared_experts is not None:
+        #     assert shared_output is not None
             # final_hidden_states += shared_output
             # print(f'final_hidden_states shape is {final_hidden_states.shape}')
 
@@ -881,11 +883,15 @@ class DeepseekV2DecoderLayer(nn.Module):
                 #                         device=topk_ids.device)
                 # topk_ids = torch.argsort(
                 #     random_matrix, dim=1)[:, :topk_ids.size(1)].to(topk_ids.dtype)
-                # 固定选前8个专家
-                topk_ids = torch.arange(8, device=topk_ids.device) \
-                                .unsqueeze(0) \
-                                .expand(topk_ids.size(0), -1) \
-                                .to(topk_ids.dtype)
+                
+                # 完全强制负载均衡
+                ep_rank_id = get_mc2_group().rank_in_group
+                ep_world_size = get_mc2_group().world_size
+                
+                topk_ids = torch.arange(global_num_experts, dtype=torch.int32).reshape(ep_world_size,-1)
+                topk_ids = torch.cat([topk_ids[ep_rank_id:],topk_ids[:ep_rank_id]], dim=0)
+                topk_ids = topk_ids.reshape(1,-1).repeat(8,1).reshape(-1,self.topk)
+                
                 
         return hidden_states, residual, topk_weights, topk_ids, row_idx ,router_logits
 
