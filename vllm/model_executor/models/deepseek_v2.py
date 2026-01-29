@@ -876,6 +876,7 @@ class DeepseekV2DecoderLayer(nn.Module):
             global_num_experts = 256 
             global_redundant_expert_num = 0
             enable_force_load_balance = True
+            topk_ids_shape_0 = topk_ids.shape[0]
             if enable_force_load_balance:
                 # random_matrix = torch.rand(topk_ids.size(0),
                 #                         global_num_experts -
@@ -888,9 +889,10 @@ class DeepseekV2DecoderLayer(nn.Module):
                 ep_rank_id = get_mc2_group().rank_in_group
                 ep_world_size = get_mc2_group().world_size
                 
-                topk_ids = torch.arange(global_num_experts, dtype=torch.int32).reshape(ep_world_size,-1)
-                topk_ids = torch.cat([topk_ids[ep_rank_id:],topk_ids[:ep_rank_id]], dim=0)
-                topk_ids = topk_ids.reshape(1,-1).repeat(8,1).reshape(-1,self.topk)
+                fake_topk_ids = torch.arange(global_num_experts, dtype=torch.int32,device=topk_ids.device).reshape(ep_world_size,-1)
+                fake_topk_ids = torch.cat([fake_topk_ids[ep_rank_id:],fake_topk_ids[:ep_rank_id]], dim=0)
+                fake_topk_ids = fake_topk_ids.reshape(1,-1).repeat(8,1).reshape(-1,self.topk)
+                topk_ids = fake_topk_ids[:topk_ids_shape_0]
                 
                 
         return hidden_states, residual, topk_weights, topk_ids, row_idx ,router_logits
