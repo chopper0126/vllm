@@ -1,6 +1,11 @@
 #!/bin/bash
 if [[ "$1" != "attention" && "$1" != "ffn" ]]; then
-    echo -e "\033[31m无效的命令,使用方法: bash single_afd_A3_16A16F.sh [attention/ffn]\033[0m"
+    echo -e "\033[31m无效的命令,使用方法: bash single_afd_A3_16A16F.sh [attention/ffn] ip\033[0m"
+    exit 1
+fi
+# 检查第二个参数是否为IP地址格式
+if ! [[ "$2" =~ ^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$ ]]; then
+    echo -e "\033[31m错误：第二个参数必须是有效的IP地址\033[0m"
     exit 1
 fi
 
@@ -17,7 +22,7 @@ MODEL_PATH="/home/c00945949/weight/DeepSeek-V3.1_w8a8mix_mtp/"
 # MODEL_PATH="/home/lxf/DSV2LiteWeight"
 
 IF_NAME="enp8s0f4u1"
-LOCAL_IP="141.61.73.131"
+LOCAL_IP="$2"
 
 export HCCL_IF_IP=${LOCAL_IP}
 export HCCL_SOCKET_IFNAME=${IF_NAME}
@@ -80,6 +85,8 @@ APP_LOG_PATH=${ALL_LOGS}/"$1".log
 #           "quant_mode": "1"
 # (需配置项)应用启动参数配置
 if [ "$1" == 'attention' ]; then
+# python -m debugpy --listen 56306 --wait-for-client $(which vllm) serve "$MODEL_PATH" \
+#vllm serve $MODEL_PATH \
     vllm serve $MODEL_PATH \
         --host 0.0.0.0 \
         --port 8006 \
