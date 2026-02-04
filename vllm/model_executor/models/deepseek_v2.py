@@ -72,6 +72,7 @@ logger = init_logger(__name__)
 from vllm.forward_context import get_forward_context
 from vllm.forward_context import AFDMetadata
 from vllm.v1.worker.ubatching import dbo_yield, dbo_enabled
+from vllm_ascend.distributed.parallel_state import get_mc2_group
 
 
 class DeepseekV2MLP(nn.Module):
@@ -346,9 +347,9 @@ class DeepseekV2MoE(nn.Module):
             assert shared_output is not None
             shared_output *= (1. / self.routed_scaling_factor)
 
-        if self.shared_experts is not None:
-            assert shared_output is not None
-            final_hidden_states += shared_output
+        # if self.shared_experts is not None:
+        #     assert shared_output is not None
+        #     final_hidden_states += shared_output
 
         if self.is_sequence_parallel:
             final_hidden_states = tensor_model_parallel_all_gather(
@@ -674,6 +675,7 @@ class DeepseekV2DecoderLayer(nn.Module):
         self.connector_name = self.afd_config.afd_connector if self.afd_config is not None else None
         self.hidden_size = config.hidden_size
         self.top_k = getattr(config, 'num_experts_per_tok', 8)
+        self.n_routed_experts = getattr(config, 'n_routed_experts', 64)
         rope_theta = getattr(config, "rope_theta", 10000)
         rope_scaling = getattr(config, "rope_scaling", None)
         max_position_embeddings = getattr(config, "max_position_embeddings",
@@ -876,6 +878,20 @@ class DeepseekV2DecoderLayer(nn.Module):
                     renormalize=True,
                     e_score_correction_bias=self.gate.e_score_correction_bias,
                 )
+                # TODO(yxj):delete me 
+                global_num_experts = self.n_routed_experts 
+                global_redundant_expert_num = 0
+                enable_force_load_balance = True
+                topk_ids_shape_0 = topk_ids.shape[0]
+                if enable_force_load_balance:
+                    # 完全强制负载均衡
+                    ep_rank_id = get_mc2_group().rank_in_group
+                    ep_world_size = get_mc2_group().world_size
+
+                    fake_topk_ids = torch.arange(global_num_experts, dtype=torch.int32,device=topk_ids.device).reshape(ep_world_size,-1)
+                    fake_topk_ids = torch.cat([fake_topk_ids[ep_rank_id:],fake_topk_ids[:ep_rank_id]], dim=0)
+                    fake_topk_ids = fake_topk_ids.reshape(1,-1).repeat(8,1).reshape(-1,self.top_k)
+                    topk_ids = fake_topk_ids[:topk_ids_shape_0]
             else:
                 raise RuntimeError("AFD connector required for compute_gate_on_attention but not found in context.")
 
