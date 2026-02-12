@@ -102,6 +102,7 @@ class SharedStorageConnector(KVConnectorBase_V1):
             The number of elements in kv_caches and layer_names should be 
             the same.
         """
+        return
         attn_metadata = forward_context.attn_metadata
 
         def inject_kv_into_layer(
@@ -253,6 +254,7 @@ class SharedStorageConnector(KVConnectorBase_V1):
             the number of tokens that can be loaded from the 
             external KV cache beyond what is already computed.
         """
+        return len(request.prompt_token_ids) - 1, False
         # NOTE: in this debug implementation, we assume that the prompt is
         # cached_prompt + newly_generated_single_token
         # Therefore, we use prompt_token_ids[:-1] to determine the folder name
