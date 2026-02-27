@@ -103,11 +103,11 @@ class SharedStorageConnector(KVConnectorBase_V1):
             The number of elements in kv_caches and layer_names should be 
             the same.
         """
-        if (self.afd_config is not None
-                and self.afd_config.afd_extra_config is not None
-                and self.afd_config.afd_extra_config.get("decode_only") is not None
-                and self.afd_config.afd_extra_config.get("decode_only")) :
-            return
+        # if (self.afd_config is not None
+        #         and self.afd_config.afd_extra_config is not None
+        #         and self.afd_config.afd_extra_config.get("decode_only") is not None
+        #         and self.afd_config.afd_extra_config.get("decode_only")) :
+        return
         attn_metadata = forward_context.attn_metadata
 
         def inject_kv_into_layer(
