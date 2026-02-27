@@ -883,15 +883,35 @@ class DeepseekV2DecoderLayer(nn.Module):
                 global_redundant_expert_num = 0
                 enable_force_load_balance = True
                 topk_ids_shape_0 = topk_ids.shape[0]
+                # if enable_force_load_balance:
+                #     # 完全强制负载均衡
+                #     ep_rank_id = get_mc2_group().rank_in_group
+                #     ep_world_size = get_mc2_group().world_size
+
+                #     fake_topk_ids = torch.arange(global_num_experts, dtype=torch.int32,device=topk_ids.device).reshape(ep_world_size,-1)
+                #     fake_topk_ids = torch.cat([fake_topk_ids[ep_rank_id:],fake_topk_ids[:ep_rank_id]], dim=0)
+                #     fake_topk_ids = fake_topk_ids.reshape(1,-1).repeat(8,1).reshape(-1,self.top_k)
+                #     topk_ids = fake_topk_ids[:topk_ids_shape_0]
                 if enable_force_load_balance:
-                    # 完全强制负载均衡
+                    topk_ids_shape_0 = topk_ids.shape[0]
                     ep_rank_id = get_mc2_group().rank_in_group
                     ep_world_size = get_mc2_group().world_size
 
-                    fake_topk_ids = torch.arange(global_num_experts, dtype=torch.int32,device=topk_ids.device).reshape(ep_world_size,-1)
-                    fake_topk_ids = torch.cat([fake_topk_ids[ep_rank_id:],fake_topk_ids[:ep_rank_id]], dim=0)
-                    fake_topk_ids = fake_topk_ids.reshape(1,-1).repeat(8,1).reshape(-1,self.top_k)
-                    topk_ids = fake_topk_ids[:topk_ids_shape_0]
+                    # 构建基础专家ID序列，并按照原逻辑进行块级循环移位
+                    base = torch.arange(global_num_experts, dtype=torch.int32, device=topk_ids.device)
+                    block_size = global_num_experts // ep_world_size  # 假设可以整除，否则需要额外处理
+                    base_blocks = base.reshape(ep_world_size, block_size)
+                    shifted_blocks = torch.cat([base_blocks[ep_rank_id:], base_blocks[:ep_rank_id]], dim=0)
+                    base_shifted = shifted_blocks.reshape(-1)  # 长度为 global_num_experts
+
+                    # 计算所需总元素数，并动态重复
+                    total_needed = topk_ids_shape_0 * self.top_k
+                    repeat_times = (total_needed + global_num_experts - 1) // global_num_experts
+                    expanded = base_shifted.repeat(repeat_times)[:total_needed]
+
+                    # 重塑为目标形状
+                    fake_topk_ids = expanded.reshape(topk_ids_shape_0, self.top_k)
+                    topk_ids = fake_topk_ids
             else:
                 raise RuntimeError("AFD connector required for compute_gate_on_attention but not found in context.")
 
